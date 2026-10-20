@@ -62,7 +62,7 @@ always @(ir) begin
 		  `MIN, `SLTU, `JR:	xop = `F(ir `FUNCT);
 		  default:	xop = `TRAP;
 		endcase
-    `BEQ,
+    `BEQ, `BNE,
     `ADDIU, `SLTIU,
     `ANDI, `ORI, `XORI,
     `LUI, `LW, `SW:	xop = ir `OP;
@@ -91,7 +91,7 @@ always @(xop or top or bot) begin
     `ORI, `F(`OR):	res = (top | bot);
     `XORI, `F(`XOR):	res = (top ^ bot);
     `LUI:		res = (bot << 16);
-    `BEQ, `F(`SUBU):	res = (top - bot);
+    `BEQ, `BNE, `F(`SUBU):	res = (top - bot);
     `F(`MIN): res = ((top < bot) ? top : bot);
     // should always cover all possible values
     default:	res = top;
@@ -139,14 +139,19 @@ initial begin
     `IPACK(m[19], `ADDIU, 5, 12, -1) // if didn't jump, R12 will be added to 11810
 
 
-    m[20] = 0;
+    // BNE tests (jr above lands here at m[20])
+    `IPACK(m[20], `BNE, 4, 5, 1)	// 601 != 11811: taken, skips m[21]
+    `IPACK(m[21], `ADDIU, 0, 1, 999)	// must NOT execute
+    `IPACK(m[22], `BNE, 2, 2, -1)	// 1 == 1: not taken, falls through
+
+    m[23] = 0;
     m[256] = 22;
 end
 
 assign ir = m[pc >> 2];
 
 // Control output signals
-wire Branch, RegDst, MemRead, MemtoReg;
+wire Branch, BranchCond, RegDst, MemRead, MemtoReg;
 wire `OPCODE ALUop;
 wire ALUSrc, MemWrite, RegWrite;
 
@@ -167,17 +172,18 @@ wire `ADDR NextPC;
 
 // Control logic
 assign RegDst = (ir `OP == `RTYPE);
-assign ALUSrc = ((ir `OP != `RTYPE) && (ir `OP != `BEQ));
+assign ALUSrc = ((ir `OP != `RTYPE) && (ir `OP != `BEQ) && (ir `OP != `BNE));
 assign ALUOp = (ir `OP);
 assign MemRead = (ir `OP == `LW);
 assign MemtoReg = (ir `OP == `LW);
 assign MemWrite = (ir `OP == `SW);
-assign RegWrite = ((ir `OP != `SW) && (ir `OP != `BEQ) && !PCtoReg);
+assign RegWrite = ((ir `OP != `SW) && (ir `OP != `BEQ) && (ir `OP != `BNE) && !PCtoReg);
 assign RegDstMux = (RegDst ? ir `RD : ir `RT);
 assign ALUSrcMux = (ALUSrc ? Signextend : r[ir `RT]);
 assign MemtoRegMux = (MemtoReg ? m[ALUresult >> 2] : ALUresult);
-assign Branch = (ir `OP == `BEQ);
-assign BranchZeroMux = ((Branch & Zero) ? BranchAdd : PCAdd);
+assign Branch = ((ir `OP == `BEQ) || (ir `OP == `BNE));
+assign BranchCond = (Zero ^ (ir `OP == `BNE));	// beq: Zero, bne: !Zero
+assign BranchZeroMux = ((Branch & BranchCond) ? BranchAdd : PCAdd);
 
 // JR Part
 assign PCtoReg = ((ir `OP == `RTYPE) && (ir `FUNCT == `JR)); // if instruction is JR
@@ -237,4 +243,3 @@ initial begin
   end
 end
 endmodule
-
