@@ -59,7 +59,7 @@ always @(ir) begin
     `RTYPE:	case (ir `FUNCT)
 		  `ADDU, `SUBU,
 		  `AND, `OR, `XOR,
-		  `SLTU:	xop = `F(ir `FUNCT);
+		  `MIN, `SLTU:	xop = `F(ir `FUNCT);
 		  default:	xop = `TRAP;
 		endcase
     `BEQ,
@@ -92,7 +92,7 @@ always @(xop or top or bot) begin
     `XORI, `F(`XOR):	res = (top ^ bot);
     `LUI:		res = (bot << 16);
     `BEQ, `F(`SUBU):	res = (top - bot);
-
+    `F(`MIN): res = ((top < bot) ? top : bot);
     // should always cover all possible values
     default:	res = top;
   endcase
@@ -127,7 +127,13 @@ initial begin
     `IPACK(m[12], `LW, 2, 1, 1023)
     `IPACK(m[13], `SW, 0, 2, 1024)
     `IPACK(m[14], `BEQ, 4, 5, -1)
-    m[15] = 0;
+
+    // MIN tests: rs smaller, rt smaller, and equal operands
+    `RPACK(m[15], 2, 3, 6, 0, `MIN)
+    `RPACK(m[16], 3, 2, 7, 0, `MIN)
+    `RPACK(m[17], 3, 3, 8, 0, `MIN)
+
+    m[18] = 0;
     m[256] = 22;
 end
 
