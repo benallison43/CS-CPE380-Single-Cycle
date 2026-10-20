@@ -59,7 +59,7 @@ always @(ir) begin
     `RTYPE:	case (ir `FUNCT)
 		  `ADDU, `SUBU,
 		  `AND, `OR, `XOR,
-		  `MIN, `SLTU:	xop = `F(ir `FUNCT);
+		  `MIN, `SLTU, `JR:	xop = `F(ir `FUNCT);
 		  default:	xop = `TRAP;
 		endcase
     `BEQ,
@@ -133,7 +133,13 @@ initial begin
     `RPACK(m[16], 3, 2, 7, 0, `MIN)
     `RPACK(m[17], 3, 3, 8, 0, `MIN)
 
-    m[18] = 0;
+    // JR test
+    r[20] = 80; // r[20] = m[20]
+    `RPACK(m[18], 20, 0, 0, 0, `JR) // use r[20] to jump to m[20]
+    `IPACK(m[19], `ADDIU, 5, 12, -1) // if didn't jump, R12 will be added to 11810
+
+
+    m[20] = 0;
     m[256] = 22;
 end
 
@@ -155,6 +161,10 @@ wire `EXTOP ALUcontrol;
 wire Zero;
 wire `WORD ALUresult;
 
+// JR Part
+wire PCtoReg;
+wire `ADDR NextPC;
+
 // Control logic
 assign RegDst = (ir `OP == `RTYPE);
 assign ALUSrc = ((ir `OP != `RTYPE) && (ir `OP != `BEQ));
@@ -162,12 +172,16 @@ assign ALUOp = (ir `OP);
 assign MemRead = (ir `OP == `LW);
 assign MemtoReg = (ir `OP == `LW);
 assign MemWrite = (ir `OP == `SW);
-assign RegWrite = ((ir `OP != `SW) && (ir `OP != `BEQ));
+assign RegWrite = ((ir `OP != `SW) && (ir `OP != `BEQ) && !PCtoReg);
 assign RegDstMux = (RegDst ? ir `RD : ir `RT);
 assign ALUSrcMux = (ALUSrc ? Signextend : r[ir `RT]);
 assign MemtoRegMux = (MemtoReg ? m[ALUresult >> 2] : ALUresult);
 assign Branch = (ir `OP == `BEQ);
 assign BranchZeroMux = ((Branch & Zero) ? BranchAdd : PCAdd);
+
+// JR Part
+assign PCtoReg = ((ir `OP == `RTYPE) && (ir `FUNCT == `JR)); // if instruction is JR
+assign NextPC = (PCtoReg ? r[ir `RS] : BranchZeroMux);  // next pc addr will be RS instead of BranchZeroMux
 
 // Function units
 assign Signextend = {{16{ir[15]}}, ir `IMM};
@@ -176,6 +190,8 @@ assign PCAdd = (pc + 4);
 assign BranchAdd = (PCAdd + Shiftleft2);
 decode DECODE(ALUcontrol, ir);
 alu    ALU(Zero, ALUresult, ALUcontrol, r[ir `RS], ALUSrcMux);
+
+
 
 always @(posedge clk) begin
   if (reset) begin
@@ -192,11 +208,11 @@ always @(posedge clk) begin
         else $display("%d: OP=%x RS=%d RT=%d RD=%d SHAMT=%d FUNCT=%x", pc, ir `OP, ir `RS, ir `RT, ir `RD, ir `SHAMT, ir `FUNCT);
         if (MemWrite) $display("%d: m[%d] <= r[%d] (%d)", pc, ALUresult, ir `RT, r[ir `RT]);
         if (RegWrite) $display("%d: r[%d] <= %d", pc, RegDstMux, MemtoRegMux);
-        $display("%d: pc <= %d", pc, BranchZeroMux);
+        $display("%d: pc <= %d", pc, NextPC); // Display Next PC instead BranchZeroMux
 `endif
         if (MemWrite) m[ALUresult >> 2] <= r[ir `RT];
         if (RegWrite) r[RegDstMux] <= MemtoRegMux;
-        pc <= BranchZeroMux;
+        pc <= NextPC; // The next PC address is determined by the JR instruction and BranchZeroMux
       end else halt <= 1;
     end
   end
