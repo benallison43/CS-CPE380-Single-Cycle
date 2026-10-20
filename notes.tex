@@ -27,3 +27,20 @@
 \maketitle
 
 \section
+
+\\THIS IS AN EXAMPLE SECTIONXXXXXXXXXXX. 
+    It works as normal and just \texttt{} for italics for code. 
+\section{The \texttt{ori} and \texttt{min} Instructions} 
+We decoded \texttt{ori} by adding \texttt{`DECODE(`OP(-1), `OP(13), 24)} to
+\texttt{ONOP}, and it runs in states 24--28. However the \texttt{IRimmedout} 
+sign-extends the immediate, but MIPS \texttt{ori} is
+supposed to zero-extend it. So we loaded \texttt{0x0000ffff} into \texttt{Y} and
+mask the immediate with \texttt{ALUand} before the OR statement.
+Without that mask, any immediate with bit 15 set would turn the whole upper 
+half of the results into ones.
+No temporary register needed for this process. For \texttt{min} we added
+\texttt{`DECODE(`OP(-1)+`FUNCT(-1), `FUNCT(1), 29)} and used states 29--39.
+
+\section{Part2}
+
+\section{Part3]
